@@ -105,6 +105,7 @@ void UiUpdateFrame(Ui* ui) {
   if (ui->window == WINDOW_LEVELS) LevelsDraw(ui);
   if (ui->window == WINDOW_DIALOG) DialogDraw(ui);
   UiDrawMouse(ui);
+  //DrawFPS(0, 1);
   EndDrawing();
 }
 

@@ -30,14 +30,24 @@ void RenderImageSimple(Image* out, Image img, float pixel_size, int camera_x,
   int y;
 #pragma omp parallel for
   for (y = y0; y < y1; y++) {
-    for (int x = x0; x < x1; x++) {
-      int px = floor((x + camera_x) * pinv) - offx;
-      int py = floor((y + camera_y) * pinv) - offy;
-      if (px >= 0 && px <= img.width && py >= 0 && py < img.height) {
-        Color c = pin[py * img.width + px];
-        if (c.a > 0) {
-          pout[y * w + x] = c;
+    int py = floor((y + camera_y) * pinv) - offy;
+    if (py >= 0) {
+      if (py < img.height) {
+        for (int x = x0; x < x1; x++) {
+          int px = floor((x + camera_x) * pinv) - offx;
+          if (px >= 0) {
+            if (px <= img.width) {
+              Color c = pin[py * img.width + px];
+              if (c.a > 0) {
+                pout[y * w + x] = c;
+              }
+            } else {
+              break;
+            }
+          }
         }
+      } else {
+        break;
       }
     }
   }
@@ -79,72 +89,276 @@ void RenderImageEdit(RenderImgCtx r) {
   int y1 = MaxInt(MinInt(ymax, h), 0);
 
 #pragma omp parallel for
-  for (y = y0; y < y1; y++) {
-    for (int x = x0; x < x1; x++) {
-      int px = floor((x + r.camera_x) * pinv);
+  if (pinv <= 1.001) {
+    for (y = y0; y < y1; y++) {
       int py = floor((y + r.camera_y) * pinv);
-      if (px >= 0 && px < img.width && py >= 0 && py < img.height) {
-        if (pinv <= 1.001) {
-          pout[y * w + x] = pin[py * img.width + px];
-          if (r.grid) {
-            int pxp = floor((x - 1 + r.camera_x) * pinv);
-            int pyp = floor((y - 1 + r.camera_y) * pinv);
-            if (px != pxp || py != pyp) {
-              pout[y * w + x] = r.grid_color;
+      if (py >= 0) {
+        if (py < img.height) {
+          for (int x = x0; x < x1; x++) {
+            int px = floor((x + r.camera_x) * pinv);
+            if (px >= 0) {
+              if (px < img.width) {
+                pout[y * w + x] = pin[py * img.width + px];
+              } else {
+                break;
+              }
             }
           }
-        } else if (pinv < 2.001) {
-          int py2 = py >> 1;
-          int px2 = px >> 1;
-          pout[y * w + x] = pin2[py2 * img2.width + px2];
         } else {
-          int py4 = py >> 2;
-          int px4 = px >> 2;
-          pout[y * w + x] = pin4[py4 * img4.width + px4];
+          break;
         }
-        // Selection buffer
-        if (has_sel) {
-          int pxs = px - r.sel_off_x;
-          int pys = py - r.sel_off_y;
-          if (pxs >= 0 && pxs < r.sel[0].width && pys >= 0 &&
-              pys < r.sel[0].height) {
-            Color coff;
-            if (pinv <= 1.001) {
-              coff = pins[pys * r.sel[0].width + pxs];
-            } else if (pinv < 2.001) {
-              int pxs2 = pxs >> 1;
-              int pys2 = pys >> 1;
-              coff = pins2[pys2 * sel2.width + pxs2];
-            } else {
-              int pxs4 = pxs >> 2;
-              int pys4 = pys >> 2;
-              coff = pins4[pys4 * sel4.width + pxs4];
-            }
+      }
+    }
 
-            if (coff.a > 0) {
-              pout[y * w + x] = coff;
+    if (r.grid) {
+      for (y = y0; y < y1; y++) {
+        int py = floor((y + r.camera_y) * pinv);
+        if (py >= 0) {
+          if (py < img.height) {
+            int pyp = floor((y - 1 + r.camera_y) * pinv);
+            for (int x = x0; x < x1; x++) {
+              int px = floor((x + r.camera_x) * pinv);
+              if (px >= 0) {
+                if (px < img.width) {
+                  int pxp = floor((x - 1 + r.camera_x) * pinv);
+                  if (px != pxp || py != pyp) {
+                    pout[y * w + x] = r.grid_color;
+                  }
+                } else {
+                  break;
+                }
+              }
             }
+          } else {
+            break;
           }
         }
-        // tool preview
-        if (has_tool) {
-          int pxs = px - r.tool_off_x;
+      }
+    }
+
+    // Selection buffer
+    if (has_sel) {
+      for (y = y0; y < y1; y++) {
+        int py = floor((y + r.camera_y) * pinv);
+        if (py >= 0) {
+          if (py < img.height) {
+            int pys = py - r.sel_off_y;
+            if (pys >= 0) {
+              if (pys < r.sel[0].height) {
+                for (int x = x0; x < x1; x++) {
+                  int px = floor((x + r.camera_x) * pinv);
+                  if (px >= 0) {
+                    if (px < img.width) {
+                      int pxs = px - r.sel_off_x;
+                      if (pxs >= 0) {
+                        if (pxs < r.sel[0].width) {
+                          Color coff = pins[pys * r.sel[0].width + pxs];
+                          if (coff.a > 0) {
+                            pout[y * w + x] = coff;
+                          }
+                        } else {
+                          break;
+                        }
+                      }
+                    } else {
+                      break;
+                    }
+                  }
+                }
+              } else {
+                break;
+              }
+            }
+          } else {
+            break;
+          }
+        }
+      }
+    }
+  } else if (pinv < 2.001) {
+    for (y = y0; y < y1; y++) {
+      int py = floor((y + r.camera_y) * pinv);
+      if (py >= 0) {
+        if (py < img.height) {
+          int py2 = py >> 1;
+          for (int x = x0; x < x1; x++) {
+            int px = floor((x + r.camera_x) * pinv);
+            if (px >= 0) {
+              if (px < img.width) {
+                int px2 = px >> 1;
+                pout[y * w + x] = pin2[py2 * img2.width + px2];
+              } else {
+                break;
+              }
+            }
+          }
+        } else {
+          break;
+        }
+      }
+    }
+
+    // Selection buffer
+    if (has_sel) {
+      for (y = y0; y < y1; y++) {
+        int py = floor((y + r.camera_y) * pinv);
+        if (py >= 0) {
+          if (py < img.height) {
+            int pys = py - r.sel_off_y;
+            if (pys >= 0) {
+              if (pys < r.sel[0].height) {
+                int pys2 = pys >> 1;
+                for (int x = x0; x < x1; x++) {
+                  int px = floor((x + r.camera_x) * pinv);
+                  if (px >= 0) {
+                    if (px < img.width) {
+                      int pxs = px - r.sel_off_x;
+                      if (pxs >= 0) {
+                        if (pxs < r.sel[0].width) {
+                          int pxs2 = pxs >> 1;
+                          Color coff = pins2[pys2 * sel2.width + pxs2];
+                          if (coff.a > 0) {
+                            pout[y * w + x] = coff;
+                          }
+                        } else {
+                          break;
+                        }
+                      }
+                    } else {
+                      break;
+                    }
+                  }
+                }
+              } else {
+                break;
+              }
+            }
+          } else {
+            break;
+          }
+        }
+      }
+    }
+  } else {
+    for (y = y0; y < y1; y++) {
+      int py = floor((y + r.camera_y) * pinv);
+      if (py >= 0) {
+        if (py < img.height) {
+          int py4 = py >> 2;
+          for (int x = x0; x < x1; x++) {
+            int px = floor((x + r.camera_x) * pinv);
+            if (px >= 0) {
+              if (px < img.width) {
+                int px4 = px >> 2;
+                pout[y * w + x] = pin4[py4 * img4.width + px4];
+              } else {
+                break;
+              }
+            }
+          }
+        } else {
+          break;
+        }
+      }
+    }
+
+    // Selection buffer
+    if (has_sel) {
+      for (y = y0; y < y1; y++) {
+        int py = floor((y + r.camera_y) * pinv);
+        if (py >= 0) {
+          if (py < img.height) {
+            int pys = py - r.sel_off_y;
+            if (pys >= 0) {
+              if (pys < r.sel[0].height) {
+                int pys4 = pys >> 2;
+                for (int x = x0; x < x1; x++) {
+                  int px = floor((x + r.camera_x) * pinv);
+                  if (px >= 0) {
+                    if (px < img.width) {
+                      int pxs = px - r.sel_off_x;
+                      if (pxs >= 0) {
+                        if (pxs < r.sel[0].width) {
+                          int pxs4 = pxs >> 2;
+                          Color coff = pins4[pys4 * sel4.width + pxs4];
+                          if (coff.a > 0) {
+                            pout[y * w + x] = coff;
+                          }
+                        } else {
+                          break;
+                        }
+                      }
+                    } else {
+                      break;
+                    }
+                  }
+                }
+              } else {
+                break;
+              }
+            }
+          } else {
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // tool preview
+  if (has_tool) {
+    for (y = y0; y < y1; y++) {
+      int py = floor((y + r.camera_y) * pinv);
+      if (py >= 0) {
+        if (py < img.height) {
           int pys = py - r.tool_off_y;
-          if (pxs >= 0 && pxs < r.tool_img.width && pys >= 0 &&
-              pys < r.tool_img.height) {
-            Color coff = ptool[pys * r.tool_img.width + pxs];
-            if (coff.a > 0) {
-              pout[y * w + x] = coff;
+          if (pys >= 0) {
+            if (pys < r.tool_img.height) {
+              for (int x = x0; x < x1; x++) {
+                int px = floor((x + r.camera_x) * pinv);
+                if (px >= 0) {
+                  if (px < img.width) {
+                    int pxs = px - r.tool_off_x;
+                    if (pxs >= 0) {
+                      if (pxs < r.tool_img.width) {
+                        Color coff = ptool[pys * r.tool_img.width + pxs];
+                        if (coff.a > 0) {
+                          pout[y * w + x] = coff;
+                        }
+                      } else {
+                        break;
+                      }
+                    }
+                  } else {
+                    break;
+                  }
+                }
+              }
+            } else {
+              break;
             }
           }
+        } else {
+          break;
         }
-        if (r.pixel_preview) {
-          if (px == r.pixel_preview_x && py == r.pixel_preview_y) {
+      }
+    }
+  }
+
+  if (r.pixel_preview) {
+    for (y = y0; y < y1; y++) {
+      int py = floor((y + r.camera_y) * pinv);
+      if (py == r.pixel_preview_y) {
+        for (int x = x0; x < x1; x++) {
+          int px = floor((x + r.camera_x) * pinv);
+          if (px == r.pixel_preview_x) {
             pout[y * w + x] = r.pixel_preview_color;
+          } else if (px > r.pixel_preview_x) {
+            break;
           }
         }
-      } else {
-        // pout[y * w + x] = r.bg;
+      } else if (py > r.pixel_preview_y) {
+        break;
       }
     }
   }
